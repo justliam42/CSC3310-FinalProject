@@ -66,7 +66,10 @@ class BTreeNode:
         
             child = self.children[i]
             if len(child.keys) > maxdeg:
-                left,mid,right = child.split
+                left,mid,right = child.split()
+
+                # delete the child first
+                self.children.pop(i)
 
                 self.children.insert(i, left) 
                 self.children.insert(i+1, right) 
@@ -96,11 +99,11 @@ class BTreeNode:
         return (left,self.keys[i_mid],right)
 
     def delete(self,key, mindeg):
+        # NTS: every pop, remove, delete action should be followed by a verification of b tree ness
+        # NTS: root node can violate the rule, so it can have just one element
         if self.leaf():
-            bisect.insort(self.keys,key) # insert into sorted list and keep sorted
-            i = bisect.bisect_left(self.keys, key)
-            if i != len(self.keys) and self.keys[i] == key:
-                del self.keys[i]
+            if key in self.keys:
+                self.keys.remove(key)
                 return True
             else:
                 return False
@@ -109,12 +112,14 @@ class BTreeNode:
             while (i < (len(self.keys)+1)):
                 # If key matches, then found
                 if len(self.keys) > i and key == self.keys[i]:
-                    left = self.children[i-1] if i > 0 else None
+                    left = self.children[i]
                     right = self.children[i+1] if i < len(self.children) else None
+
                     if left:
                         self.keys[i] = left.keys.pop()
-                    else:
+                    elif right :
                         self.keys[i] = right.keys.pop(0)
+
                     break
 
                 # If key is not found, and there is enough children, 
@@ -127,32 +132,73 @@ class BTreeNode:
 
             child = self.children[i]
             if len(child.keys) < mindeg:
-                left = self.children[i-1] if i > 0 else None
-                right = self.children[i+1] if i < len(self.children) else None
+                left = self.children[i - 1] if i > 0 else None
+                right = self.children[i+1] if i + 1 < len(self.children) else None
 
-                if left and left.keys > mindeg:
-                    k = left.keys.pop()
-                    child.keys.insert(0,self.keys[i])
-                    self.keys[i] = k
-                elif right and right.keys > mindeg:
+                # NTS: self.keys[i] is NOT the separator
+                if left and len(left.keys) > mindeg:
+                    # find separator between the left child and child
+                    # it has a left sibling so this is at least 0
+                    sep = bisect.bisect_left(self.keys, child.keys[0]) - 1
+
+
+                    k = left.keys.pop() # largest element from the left
+                    child.keys.insert(0,self.keys[sep]) # separator is smaller than all the keys in the child
+                    self.keys[sep] = k # move largest element from the left to the parent
+                elif right and len(right.keys) > mindeg:
                     k = right.keys.pop(0)
                     child.keys.append(self.keys[i])
                     self.keys[i] = k
                 else:
                     # No siblings have enough keys, we merge two nodes together
                     new_node = BTreeNode()
-                    i = bisect.bisect_left(self.keys, k)
+
+                    # find the separator to be moved down, use smallest element from child
+                    sep = bisect.bisect_left(self.keys, child.keys[0]) - 1
+
+                    # cases: had a left sibling, had a right sibling, had no siblings
                     if left:
-                        mid_i = i
+                        mid_i = sep
 
                         new_node.children = left.children + child.children
-                        new_node.keys = left.keys + self.keys[mid_i] + child.keys
+                        new_node.keys = left.keys + [self.keys[mid_i]] + child.keys
                         self.keys.pop(mid_i)
+
+                        # remove the old nodes
+                        self.children.remove(left)
+                        self.children.remove(child)
+
+                        # if the merge means that we don't have any more keys in the root, the new
+                        # node is the root
+                        if len(self.keys) == 0:
+                            self.children = new_node.children
+                            self.keys = new_node.keys
+                        else:
+                            # add the new node as a child
+                            # TODO: fix where it is being added, it's not always at the end
+                            self.children.insert(i, new_node)
+
                     else:
-                        mid_i = i+1
+                        mid_i = sep + 1
                         new_node.children = child.children + right.children
-                        new_node.keys = child.keys + self.keys[mid_i] + right.keys
+                        new_node.keys = child.keys + [self.keys[mid_i]] + right.keys
                         self.keys.pop(mid_i)
+
+                        # remove the old nodes
+                        self.children.remove(right)
+                        self.children.remove(child)
+
+                        # if the merge means that we don't have any more keys in the root, the new
+                        # node is the root
+                        if len(self.keys) == 0:
+                            self.children = new_node.children
+                            self.keys = new_node.keys
+                        else:
+                            # add the new node as a child
+                            # TODO: fix where it is being added, it's not always at the end
+                            # i is the index of the separator we are less than, which is now removed
+                            # for a given i, i is the left child of the separator, i + 1 is the right child of the separator
+                            self.children.insert(i , new_node)
 
 
 class BTree:
@@ -176,7 +222,9 @@ class BTree:
 def testbtrees():
     print("Create BTree of minimum degree=2")
     btree = BTree(2)
-    keys = [10, 20, 5, 6, 12, 30, 7, 17]
+    # example from: https://www.youtube.com/watch?v=K1a2Bk8NrYQ
+    keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41]
+
     for key in keys:
         btree.insert(key)
         print("Insert key:", key)
@@ -190,6 +238,19 @@ def testbtrees():
     for key in [11,13,0,-1,100,31,29]:
         print("Search key:", key, "Found:",btree.search(key))
 
+    for key in keys:
+        btree.delete(key)
+        print("Delete key:", key)
+        btree.printtree()
+        print("-----------")
+
+    btree = BTree(2)
+    keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41]
+
+    for key in keys:
+        btree.insert(key)
+
+    keys.reverse()
     for key in keys:
         btree.delete(key)
         print("Delete key:", key)
