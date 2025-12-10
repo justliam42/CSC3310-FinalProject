@@ -144,23 +144,17 @@ class BTreeNode:
                 left = self.children[i - 1] if i > 0 else None
                 right = self.children[i+1] if i + 1 < len(self.children) else None
 
-                # NTS: self.keys[i] is NOT the separator
+                # NTS: self.keys[i] is NOT the separator 
+                # or is it? i - 1 for left i for right?
                 if left and len(left.keys) > mindeg:
-                    # find separator between the left sibling and child
-                    # it has a left sibling so this is at least 0
-                    sep = 0
-                    if len(child.keys) > 0:
-                        sep = bisect.bisect_left(self.keys, child.keys[0]) - 1
-
-
-                    k = left.keys.pop() # largest element from the left
-                    child.keys.insert(0,self.keys[i]) # separator is smaller than all the keys in the child
+                    k = left.keys.pop() # largest element from the left becomes the new separator
+                    child.keys.insert(0,self.keys[i - 1]) # separator is smaller than all the keys in the child
+                    self.keys[i - 1] = k
 
                     # also take the right child  of the left sibling if present
                     if len(left.children) > 0:
                         child.children.insert(0, left.children.pop())
 
-                    self.keys[sep] = k # move largest element from the left to the parent
                 elif right and len(right.keys) > mindeg:
                     k = right.keys.pop(0)
                     child.keys.append(self.keys[i])
@@ -169,15 +163,14 @@ class BTreeNode:
                     if len(right.children) > 0:
                         child.children.insert(0, right.children.pop(0))
                     self.keys[i] = k
+
                 else:
                     # No siblings have enough keys, we merge two nodes together
                     new_node = BTreeNode()
 
-                    # find the separator to be moved down, use smallest element from child
-                    sep = 0
-                    if len(child.keys) > 0:
-                        sep = bisect.bisect_left(self.keys, child.keys[0]) - 1
-                    
+                    # find the separator to be moved down, use i to determine, left biased
+                    sep = i - 1 if i > 0 else 0
+
                     middle = self.keys[sep]
 
                     # cases: had a left sibling, had a right sibling, had no siblings
@@ -185,7 +178,7 @@ class BTreeNode:
                         new_node.children = left.children + child.children
                         new_node.keys = left.keys + [middle] + child.keys
 
-                        self.keys.pop(sep)
+                        self.keys.remove(middle)
 
                         # remove the old nodes
                         self.children.remove(left)
@@ -239,7 +232,7 @@ def testbtrees():
     print("Create BTree of minimum degree=2")
     btree = BTree(1)
     # example from: https://www.youtube.com/watch?v=K1a2Bk8NrYQ
-    keys = [20, 40, 10, 30, 32, 50, 60, 5, 15, 25, 28, 31, 32, 35, 45, 55, 65]
+    keys = [20, 40, 10, 30, 32, 50, 60, 5, 15, 25, 28, 31, 35, 45, 55, 65]
 
     for key in keys:
         btree.insert(key)
@@ -254,7 +247,7 @@ def testbtrees():
     for key in [11,13,0,-1,100,31,29]:
         print("Search key:", key, "Found:",btree.search(key))
 
-    delete = [31, 28, 45, 32]
+    delete = [31, 28, 45, 32, 60]
     for key in delete:
         btree.delete(key)
         print("Delete key:", key)
