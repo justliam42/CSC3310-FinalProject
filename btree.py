@@ -17,7 +17,6 @@ class BTreeNode:
         for child in self.children:
             child.display(level + 1)
 
-
     def leaf(self):
         return len(self.children) == 0
 
@@ -34,7 +33,6 @@ class BTreeNode:
             if not self.leaf() and (len(self.keys) == i or key < self.keys[i]):
                 return self.children[i].search(key)
         return searchResult(False,self)
-            
 
     def insert(self, key, maxdeg, root=True):
         """ Insert an element into the btree
@@ -61,9 +59,8 @@ class BTreeNode:
                 if len(self.keys) == i or key < self.keys[i]:
                     self.children[i].insert(key, maxdeg, root=False)
                     break
-                
                 i+=1
-        
+
             child = self.children[i]
             if len(child.keys) > maxdeg:
                 left,mid,right = child.split()
@@ -75,7 +72,6 @@ class BTreeNode:
                 self.children.insert(i+1, right) 
                 bisect.insort(self.keys,mid)
 
-        # This isn't the prettiest but it makes sense to me anyways,
         # If this is the root, and we need to split, then do so and return a new root
         if root and len(self.keys) > maxdeg:
             newroot = BTreeNode()
