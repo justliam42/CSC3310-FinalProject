@@ -1,4 +1,5 @@
 import bisect
+import random
 
 # Result pattern class so that we can return a result and a location (if it is false it is still useful to see where it should be)
 class searchResult:
@@ -86,8 +87,7 @@ class BTreeNode:
             return newroot
         else: 
             return self
-            
-        
+
 
     def split(self):
         """Splits a node into two, returning a left node, a middle key, and a right node"""
@@ -105,21 +105,88 @@ class BTreeNode:
 
         return (left,self.keys[i_mid],right)
 
-    def removeLargest(self):
+
+    def removeLargest(self, mindeg):
         if self.leaf():
             return self.keys.pop()
         else:
-            return self.children[-1].removeLargest()
+            removed = self.children[-1].removeLargest(mindeg)
+            self.fixViolation(len(self.children) - 1, mindeg)
+            return removed
+
+
+    def fixViolation(self, i, mindeg):
+        child = self.children[i]
+        if len(child.keys) < mindeg:
+            left = self.children[i - 1] if i > 0 else None
+            right = self.children[i+1] if i + 1 < len(self.children) else None
+
+            if left and len(left.keys) > mindeg:
+                k = left.keys.pop() # largest element from the left becomes the new separator
+                child.keys.insert(0,self.keys[i - 1]) # separator is smaller than all the keys in the child
+                self.keys[i - 1] = k
+
+                # also take the right child  of the left sibling if present
+                if len(left.children) > 0:
+                    child.children.insert(0, left.children.pop())
+
+            elif right and len(right.keys) > mindeg:
+                k = right.keys.pop(0)
+                child.keys.append(self.keys[i])
+
+                # also take the left child of right sibling if present
+                if len(right.children) > 0:
+                    child.children.append(right.children.pop(0))
+                self.keys[i] = k
+
+            else:
+                # No siblings have enough keys, we merge two nodes together
+                new_node = BTreeNode()
+
+                # find the separator to be moved down, use i to determine
+                sep = i - 1 if i > 0 else 0
+
+                middle = self.keys[sep]
+
+                if left:
+                    new_node.children = left.children + child.children
+                    new_node.keys = left.keys + [middle] + child.keys
+
+                    self.keys.remove(middle)
+
+                    # remove the old nodes
+                    self.children.remove(left)
+                    self.children.remove(child)
+
+                    # add the new node as a child
+                    self.children.insert(i - 1, new_node)
+
+                else:
+                    new_node.children = child.children + right.children
+                    new_node.keys = child.keys + [middle] + right.keys
+
+                    self.keys.pop(sep)
+
+                    # remove the old nodes
+                    self.children.remove(right)
+                    self.children.remove(child)
+
+                    # add the new node as a child
+                    # i is the index of the separator we are less than, which is now removed
+                    # for a given i, i is the left child of the separator, i + 1 is the right child of the separator
+                    self.children.insert(i , new_node)
+
 
     def delete(self,key, mindeg, root=False):
-        # NTS: every pop, remove, delete action should be followed by a verification of b tree ness
-        # NTS: root node can violate the rule, so it can have just one element
+        # Case I: The node is in the leaf node
         if self.leaf():
             if key in self.keys:
                 self.keys.remove(key)
                 return True
             else:
                 return False
+
+        # Case II: The node is an internal node
         else:
             i = 0
             while (i < (len(self.keys)+1)):
@@ -129,13 +196,9 @@ class BTreeNode:
                     right = self.children[i+1] if i < len(self.children) else None
 
                     if left:
-                        self.keys[i] = left.removeLargest()
-                        # left.delete(self.keys[i], mindeg)
-                        # left.keys.pop()
+                        self.keys[i] = left.removeLargest(mindeg)
                     elif right :
-                        self.keys[i] = right.removeLargest()
-                        # right.delete(self.keys[i], mindeg)
-                        # right.keys.pop(0)
+                        self.keys[i] = right.removeLargest(mindeg)
 
                     break
 
@@ -147,70 +210,10 @@ class BTreeNode:
                     break
                 i+=1
 
-            child = self.children[i]
-            if len(child.keys) < mindeg:
-                left = self.children[i - 1] if i > 0 else None
-                right = self.children[i+1] if i + 1 < len(self.children) else None
+            # Ensure that there is no violation in the children
+            self.fixViolation(i, mindeg)
 
-                # NTS: self.keys[i] is NOT the separator 
-                # or is it? i - 1 for left i for right?
-                if left and len(left.keys) > mindeg:
-                    k = left.keys.pop() # largest element from the left becomes the new separator
-                    child.keys.insert(0,self.keys[i - 1]) # separator is smaller than all the keys in the child
-                    self.keys[i - 1] = k
-
-                    # also take the right child  of the left sibling if present
-                    if len(left.children) > 0:
-                        child.children.insert(0, left.children.pop())
-
-                elif right and len(right.keys) > mindeg:
-                    k = right.keys.pop(0)
-                    child.keys.append(self.keys[i])
-
-                    # also take the left child of right sibling if present
-                    if len(right.children) > 0:
-                        child.children.append(right.children.pop(0))
-                    self.keys[i] = k
-
-                else:
-                    # No siblings have enough keys, we merge two nodes together
-                    new_node = BTreeNode()
-
-                    # find the separator to be moved down, use i to determine, left biased
-                    sep = i - 1 if i > 0 else 0
-
-                    middle = self.keys[sep]
-
-                    # cases: had a left sibling, had a right sibling, had no siblings
-                    if left:
-                        new_node.children = left.children + child.children
-                        new_node.keys = left.keys + [middle] + child.keys
-
-                        self.keys.remove(middle)
-
-                        # remove the old nodes
-                        self.children.remove(left)
-                        self.children.remove(child)
-
-                        # add the new node as a child
-                        # TODO: fix where it is being added, it's not always at the end
-                        self.children.insert(i - 1, new_node)
-
-                    else:
-                        new_node.children = child.children + right.children
-                        new_node.keys = child.keys + [middle] + right.keys
-                        
-                        self.keys.pop(sep)
-
-                        # remove the old nodes
-                        self.children.remove(right)
-                        self.children.remove(child)
-
-                        # add the new node as a child
-                        # TODO: fix where it is being added, it's not always at the end
-                        # i is the index of the separator we are less than, which is now removed
-                        # for a given i, i is the left child of the separator, i + 1 is the right child of the separator
-                        self.children.insert(i , new_node)
+        # Case III: The height of the tree changes
         if root and len(self.keys) == 0:
             # if the root is empty, then the tree has reconfigured such that the new root is at level 1
             # remove empty root and assign level 1 as the new root
@@ -236,12 +239,18 @@ class BTree:
     def printtree(self):
         self.root.display()
 
+    def isEmpty(self):
+        return len(self.root.keys) == 0 and len(self.root.children) == 0
+
 def testbtrees():
     print("Create BTree of minimum degree=2")
     btree = BTree(2)
-    # example from: https://www.youtube.com/watch?v=K1a2Bk8NrYQ
-    # keys = [20, 40, 10, 30, 32, 50, 60, 5, 15, 25, 28, 31, 35, 45, 55, 65]
-    keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41, 42, 69, 98, 12, 14, 20, 21, 25, 1, 2, 3, 4, 5, 44, 45, 46, 47, 48, 49, 50]
+
+    keys = []
+    for _ in range(500):
+        keys.append(_)
+    random.shuffle(keys)
+    print ("The list:", keys)
 
     for key in keys:
         btree.insert(key)
@@ -251,10 +260,15 @@ def testbtrees():
 
     print("\n\nExpected true: ")
     for key in keys:
-        print("Search key:", key, "Found:",btree.search(key))
+        result = btree.search(key)
+        print("Search key:", key, "Found:", result)
+        assert(result)
+
     print("\nExpected false: ")
-    for key in [11,13,0,-1,100,31,29]:
-        print("Search key:", key, "Found:",btree.search(key))
+    for key in [507,513,5000,-1,1000,3100,2900]:
+        result = btree.search(key)
+        print("Search key:", key, "Found:", result)
+        assert(not result)
 
     delete = keys
     for key in delete:
@@ -263,8 +277,7 @@ def testbtrees():
         btree.printtree()
         print("-----------")
 
-    # btree = BTree(2)
-    # keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41]
+    assert(btree.isEmpty())
 
     for key in keys:
         btree.insert(key)
@@ -275,6 +288,8 @@ def testbtrees():
         print("Delete key:", key)
         btree.printtree()
         print("-----------")
+
+    assert(btree.isEmpty())
 
 testbtrees()
 
