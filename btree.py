@@ -105,6 +105,12 @@ class BTreeNode:
 
         return (left,self.keys[i_mid],right)
 
+    def removeLargest(self):
+        if self.leaf():
+            return self.keys.pop()
+        else:
+            return self.children[-1].removeLargest()
+
     def delete(self,key, mindeg, root=False):
         # NTS: every pop, remove, delete action should be followed by a verification of b tree ness
         # NTS: root node can violate the rule, so it can have just one element
@@ -123,11 +129,13 @@ class BTreeNode:
                     right = self.children[i+1] if i < len(self.children) else None
 
                     if left:
-                        self.keys[i] = left.keys[-1]
-                        left.delete(self.keys[i], mindeg)
+                        self.keys[i] = left.removeLargest()
+                        # left.delete(self.keys[i], mindeg)
+                        # left.keys.pop()
                     elif right :
-                        self.keys[i] = right.keys[0]
-                        right.delete(self.keys[i], mindeg)
+                        self.keys[i] = right.removeLargest()
+                        # right.delete(self.keys[i], mindeg)
+                        # right.keys.pop(0)
 
                     break
 
@@ -161,7 +169,7 @@ class BTreeNode:
 
                     # also take the left child of right sibling if present
                     if len(right.children) > 0:
-                        child.children.insert(0, right.children.pop(0))
+                        child.children.append(right.children.pop(0))
                     self.keys[i] = k
 
                 else:
@@ -186,7 +194,7 @@ class BTreeNode:
 
                         # add the new node as a child
                         # TODO: fix where it is being added, it's not always at the end
-                        self.children.insert(i, new_node)
+                        self.children.insert(i - 1, new_node)
 
                     else:
                         new_node.children = child.children + right.children
@@ -230,9 +238,10 @@ class BTree:
 
 def testbtrees():
     print("Create BTree of minimum degree=2")
-    btree = BTree(1)
+    btree = BTree(2)
     # example from: https://www.youtube.com/watch?v=K1a2Bk8NrYQ
-    keys = [20, 40, 10, 30, 32, 50, 60, 5, 15, 25, 28, 31, 35, 45, 55, 65]
+    # keys = [20, 40, 10, 30, 32, 50, 60, 5, 15, 25, 28, 31, 35, 45, 55, 65]
+    keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41, 42, 69, 98, 12, 14, 20, 21, 25, 1, 2, 3, 4, 5, 44, 45, 46, 47, 48, 49, 50]
 
     for key in keys:
         btree.insert(key)
@@ -247,21 +256,21 @@ def testbtrees():
     for key in [11,13,0,-1,100,31,29]:
         print("Search key:", key, "Found:",btree.search(key))
 
-    delete = [31, 28, 45, 32, 60]
+    delete = keys
     for key in delete:
         btree.delete(key)
         print("Delete key:", key)
         btree.printtree()
         print("-----------")
 
-    btree = BTree(2)
-    keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41]
+    # btree = BTree(2)
+    # keys = [59, 23, 7, 97, 73, 67, 19, 79, 61, 41]
 
     for key in keys:
         btree.insert(key)
 
-    keys.reverse()
-    for key in keys:
+    delete.reverse()
+    for key in delete:
         btree.delete(key)
         print("Delete key:", key)
         btree.printtree()
